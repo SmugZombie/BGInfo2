@@ -1,6 +1,6 @@
-# 🖥️ BgInfoClone
+# 🖥️ BgInfo2
 
-BgInfoClone is a Windows Forms application that overlays custom system and API data onto your desktop wallpaper. Inspired by Sysinternals BGInfo, this version allows draggable, formatted overlays with API integration, text styling, and auto-updating.
+BgInfo2 is a Windows Forms application that overlays custom system and API data onto your desktop wallpaper. Inspired by Sysinternals BGInfo, this version allows draggable, formatted overlays with API integration, text styling, and auto-updating.
 
 ---
 
@@ -41,6 +41,6 @@ BgInfoClone is a Windows Forms application that overlays custom system and API d
 ### 🛠 Build
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/BgInfoClone.git
+git clone https://github.com/SmugZombie/BgInfo2.git
 cd BgInfoClone
 dotnet build
