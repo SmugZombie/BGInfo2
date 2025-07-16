@@ -1,0 +1,24 @@
+[
+  {
+    "Name": "Test",
+    "Url": "https://ronegli.com/manifest.json",
+    "Method": "GET",
+    "AuthType": "None",
+    "Username": "",
+    "PasswordOrToken": "",
+    "JsonKey": "short_name",
+    "ContentType": "json",
+    "RegexPattern": ""
+  },
+  {
+    "Name": "Test2",
+    "Url": "https://ronegli.com/manifest.json",
+    "Method": "GET",
+    "AuthType": "None",
+    "Username": "",
+    "PasswordOrToken": "",
+    "JsonKey": "",
+    "ContentType": "json",
+    "RegexPattern": "\u0022short_name\u0022\\s*:\\s*\u0022([^\u0022]\u002B)\u0022"
+  }
+]
