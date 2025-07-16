@@ -41,6 +41,83 @@ BgInfo2 is a Windows Forms application that overlays custom system and API data 
 ### 🛠 Build
 
 ```bash
-git clone https://github.com/SmugZombie/BgInfo2.git
-cd BgInfoClone
+git clone https://github.com/smugzombie/BgInfo2.git
+cd BgInfo2
 dotnet build
+```
+
+To generate a standalone executable:
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeAllContentForSelfExtract=true
+```
+
+Executable will be in:  
+`bin\Release\net6.0\win-x64\publish\BgInfoClone.exe`
+
+---
+
+## 🧪 Usage
+
+1. **Select Wallpaper** from the menu
+2. Drag the red box to where you want the text
+3. Use the `Template Format` box to set your desired output using placeholders
+4. Use `Manage APIs` to add custom data
+5. Click **Update Wallpaper** to apply it
+6. Wallpaper is saved and set using Windows API
+
+---
+
+## 📁 Config Files
+
+- `bginfo_config.json`: Stores font, color, position, format
+- `api_connections.json`: Stores API endpoints and auth
+
+---
+
+## 🔒 API Format
+
+Use this placeholder:
+
+```
+{API:YourAPIName}
+```
+
+It will be replaced by the result from the corresponding API definition.
+
+### Example API JSON Config:
+
+```json
+[
+  {
+    "Name": "demo",
+    "Url": "https://api.example.com/data",
+    "Method": "GET",
+    "AuthType": "Bearer",
+    "PasswordOrToken": "your-token",
+    "ContentType": "json",
+    "JsonKey": "data.status"
+  }
+]
+```
+
+---
+
+## 💡 Tips
+
+- Only the **top-left corner** of the red drag area is used to calculate wallpaper placement
+- Works best with 1920x1080 wallpapers
+- If using scaling, check your Windows DPI settings for accurate alignment
+
+---
+
+## 📃 License
+
+MIT License
+
+---
+
+## 🙋‍♂️ Author
+
+**Ron Egli**  
+💻 GitHub: [@smugzombie](https://github.com/smugzombie)
