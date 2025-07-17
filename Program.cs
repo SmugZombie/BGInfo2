@@ -8,10 +8,11 @@ using System.Text.Json;
 using System.Windows.Forms;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 namespace BgInfoClone
 {
-    public class MainForm : Form
+    public partial class MainForm : Form
     {
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
@@ -20,199 +21,55 @@ namespace BgInfoClone
         private const int SPIF_UPDATEINIFILE = 0x01;
         private const int SPIF_SENDWININICHANGE = 0x02;
 
+        // Core application fields
         private string selectedWallpaperPath = string.Empty;
         private List<ApiConnection> apiConnections = new();
-        private PictureBox previewBox;
-        private Panel dragPanel;
         private Point dragOffset;
-        private TextBox formatBox;
-        private Button fontButton, colorButton;
         private Font selectedFont = new Font("Consolas", 20);
         private Brush selectedBrush = Brushes.LightGreen;
         private ColorDialog colorDialog = new ColorDialog();
         private FontDialog fontDialog = new FontDialog();
         private System.Windows.Forms.Timer updateTimer;
         private const string ConfigPath = "bginfo_config.json";
-        private CheckBox chkHostname;
-        private CheckBox chkUser;
-        private CheckBox chkIP;
-        private CheckBox chkOS;
-        private CheckBox chkCores;
         private int previewWidth;
         private int previewHeight;
-        private StatusStrip statusStrip;
-        private ToolStripStatusLabel previewPosLabel;
-        private ToolStripStatusLabel realPosLabel;
+        private bool startHidden = false;
 
+        // System tray fields
+        private NotifyIcon trayIcon;
+        private ContextMenuStrip trayMenu;
 
         int screenWidth = Screen.PrimaryScreen.Bounds.Width;
         int screenHeight = Screen.PrimaryScreen.Bounds.Height;
 
         public MainForm()
         {
-            LoadApiConnections(); // ✅ Load from file before it's used
-
-                    
+            // Load API connections before UI initialization
+            LoadApiConnections();
+            
+            // Calculate preview dimensions
             float scale = 0.5f;
             previewWidth = (int)(screenWidth * scale);
             previewHeight = (int)(screenHeight * scale);
             
-            this.Text = "BGInfo 2";
-            this.Size = new Size((int)previewWidth + 45, (int)previewHeight + 150);
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.MaximizeBox = true;
-            this.AutoScroll = true;
-
-            var layout = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
-
-            chkHostname = new CheckBox { Text = "Hostname", Checked = true };
-            chkUser = new CheckBox { Text = "User", Checked = true };
-            chkIP = new CheckBox { Text = "IP", Checked = true };
-            chkOS = new CheckBox { Text = "OS", Checked = true };
-            chkCores = new CheckBox { Text = "Cores", Checked = true };
-
-            fontButton = new Button { Text = "Choose Font" };
-            fontButton.Click += (s, e) => {
-                if (fontDialog.ShowDialog() == DialogResult.OK)
-                {
-                    selectedFont = fontDialog.Font;
-                }
-            };
-
-            colorButton = new Button { Text = "Choose Color" };
-            colorButton.Click += (s, e) => {
-                if (colorDialog.ShowDialog() == DialogResult.OK)
-                {
-                    selectedBrush = new SolidBrush(colorDialog.Color);
-                }
-            };
-
-            var manageApisButton = new Button { Text = "Manage APIs" };
-            manageApisButton.Click += (s, e) =>
-            {
-                var form = new ApiManagerForm(apiConnections);
-                if (form.ShowDialog() == DialogResult.OK)
-                {
-                    apiConnections = form.UpdatedConnections;
-                    SaveApiConnections();
-                }
-            };
-            layout.Controls.Add(manageApisButton);
-
-            Button selectButton = new Button() { Text = "Select Wallpaper", Width = 100 };
-            selectButton.Click += SelectButton_Click;
-            layout.Controls.Add(selectButton);
-
-            Button generateButton = new Button() { Text = "Update Wallpaper", Width = 100 };
-            generateButton.Click += GenerateButton_Click;
-            layout.Controls.Add(generateButton);
-
-            Button saveButton = new Button() { Text = "Save Config", Width = 100 };
-            saveButton.Click += (s, e) => SaveConfig();
-            layout.Controls.Add(saveButton);
-
-            Button loadButton = new Button() { Text = "Load Config", Width = 100 };
-            loadButton.Click += (s, e) => LoadConfig();
-            layout.Controls.Add(loadButton);
-
-            layout.Controls.Add(new Label { Text = "Template Format:" });
-            formatBox = new TextBox { Width = 600, Multiline = true, Height = 60 };
-            formatBox.Text = @"Hostname: {hostname}
-User: {user}
-IP: {ip}
-OS: {os}
-Cores: {cores}";
-            layout.Controls.Add(formatBox);
-
-            Controls.Add(layout);
-
-            dragPanel = new Panel
-            {
-                BackColor = Color.Transparent,
-                Location = new Point(0, 0), // Relative to previewBox now
-                Size = new Size(500, 100),
-                Parent = previewBox // 👈 This is the key change
-            };
-            dragPanel.BringToFront();
-            dragPanel.Paint += (s, e) =>
-            {
-                var g = e.Graphics;
-                using var pen = new Pen(Color.Red, 2);
-                g.DrawRectangle(pen, 0, 0, dragPanel.Width - 1, dragPanel.Height - 1);
-
-                // Draw the preview text
-                string previewText = GetSystemInfo();
-                using var brush = new SolidBrush(Color.Red);
-                Color background = Color.FromArgb(100, 255, 255, 255); // translucent white
-                e.Graphics.FillRectangle(new SolidBrush(background), 0, 0, dragPanel.Width, dragPanel.Height);
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                //g.DrawString(previewText, selectedFont, brush, new PointF(5, 5));
-                g.DrawString(previewText, selectedFont, brush, new PointF(0, 0));
-
-            };
-
-            dragPanel.MouseDown += (s, e) => dragOffset = e.Location;
-            dragPanel.MouseMove += (s, e) =>
-            {
-                if (e.Button == MouseButtons.Left)
-                {
-                    var newLeft = dragPanel.Left + e.X - dragOffset.X;
-                    var newTop = dragPanel.Top + e.Y - dragOffset.Y;
-
-                    // Clamp inside previewBox
-                    newLeft = Math.Max(0, Math.Min(newLeft, previewBox.Width - dragPanel.Width));
-                    newTop = Math.Max(0, Math.Min(newTop, previewBox.Height - dragPanel.Height));
-
-                    dragPanel.Left = newLeft;
-                    dragPanel.Top = newTop;
-
-                    dragPanel.Invalidate();
-                    UpdateStatusBar(); // Update position in status bar
-                }
-            };
-
-            Controls.Add(dragPanel);
-
-            int previewScalePercent = 50; // you can tweak this later
-            int screenW = Screen.PrimaryScreen.Bounds.Width;
-            int screenH = Screen.PrimaryScreen.Bounds.Height;
-
-            int previewW = (screenW * previewScalePercent) / 100;
-            int previewH = (screenH * previewScalePercent) / 100;
-
-            previewBox = new PictureBox
-            {
-                Width = previewW,
-                Height = previewH,
-                SizeMode = PictureBoxSizeMode.Normal,
-                Location = new Point(10, layout.Bottom + 20)
-            };
-
-
-            previewBox.Paint += (s, e) =>
-            {
-                var g = e.Graphics;
-                using var pen = new Pen(Color.Red, 2);
-                g.DrawRectangle(pen, 0, 0, previewBox.Width - 1, previewBox.Height - 1);
-            };
-            Controls.Add(previewBox);
-
-            statusStrip = new StatusStrip();
-            previewPosLabel = new ToolStripStatusLabel();
-            realPosLabel = new ToolStripStatusLabel();
-
-            statusStrip.Items.Add(previewPosLabel);
-            statusStrip.Items.Add(realPosLabel);
-
-            Controls.Add(statusStrip);
-
+            // Initialize UI components (from designer)
+            InitializeComponent();
+            
+            // Initialize timer after UI is ready
             updateTimer = new System.Windows.Forms.Timer();
             updateTimer.Interval = 30 * 60 * 1000; // 30 minutes
             updateTimer.Tick += (s, e) => GenerateWallpaper();
             updateTimer.Start();
-
             
+            // Load configuration after UI is initialized
             LoadConfig();
+            
+            // Initialize tray icon
+            InitializeTrayIcon();
+            
+            // Handle form events for tray behavior
+            this.FormClosing += MainForm_FormClosing;
+            this.Load += MainForm_Load;
         }
 
         private void SelectButton_Click(object? sender, EventArgs e)
@@ -518,57 +375,78 @@ Cores: {cores}";
 
         private void SaveConfig()
         {
-            var config = new
+            try
             {
-                selectedWallpaperPath,
-                selectedFontName = selectedFont.Name,
-                selectedFontSize = selectedFont.Size,
-                selectedFontStyle = (int)selectedFont.Style,
-                fontColor = ((SolidBrush)selectedBrush).Color.ToArgb(),
-                dragLeft = dragPanel.Left,
-                dragTop = dragPanel.Top,
-                dragWidth = dragPanel.Width,
-                dragHeight = dragPanel.Height,
-                customFormatText = formatBox.Text
-            };
+                var config = new
+                {
+                    selectedWallpaperPath,
+                    selectedFontName = selectedFont.Name,
+                    selectedFontSize = selectedFont.Size,
+                    selectedFontStyle = (int)selectedFont.Style,
+                    fontColor = ((SolidBrush)selectedBrush).Color.ToArgb(),
+                    dragLeft = dragPanel.Left,
+                    dragTop = dragPanel.Top,
+                    dragWidth = dragPanel.Width,
+                    dragHeight = dragPanel.Height,
+                    customFormatText = formatBox.Text,
+                    startHidden
+                };
 
-            File.WriteAllText(ConfigPath, JsonSerializer.Serialize(config));
-            //MessageBox.Show("Configuration saved.");
+                File.WriteAllText(ConfigPath, JsonSerializer.Serialize(config));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to save configuration: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
 
         private void LoadConfig()
         {
             if (!File.Exists(ConfigPath)) return;
-            var json = File.ReadAllText(ConfigPath);
-            using var doc = JsonDocument.Parse(json);
-            var config = doc.RootElement;
-
-            selectedWallpaperPath = config.GetProperty("selectedWallpaperPath").GetString() ?? "";
-            selectedFont = new Font(
-                config.GetProperty("selectedFontName").GetString(),
-                (float)config.GetProperty("selectedFontSize").GetDouble(),
-                (FontStyle)config.GetProperty("selectedFontStyle").GetInt32()
-            );
-            selectedBrush = new SolidBrush(Color.FromArgb(config.GetProperty("fontColor").GetInt32()));
-
-            if (config.TryGetProperty("dragLeft", out var l) &&
-                config.TryGetProperty("dragTop", out var t) &&
-                config.TryGetProperty("dragWidth", out var w) &&
-                config.TryGetProperty("dragHeight", out var h))
+            try
             {
-                dragPanel.Left = l.GetInt32();
-                dragPanel.Top = t.GetInt32();
-                dragPanel.Width = w.GetInt32();
-                dragPanel.Height = h.GetInt32();
-            }
+                var json = File.ReadAllText(ConfigPath);
+                using var doc = JsonDocument.Parse(json);
+                var config = doc.RootElement;
 
-            if (config.TryGetProperty("customFormatText", out var format))
-            {
-                formatBox.Text = format.GetString();
+                selectedWallpaperPath = config.GetProperty("selectedWallpaperPath").GetString() ?? "";
+                selectedFont = new Font(
+                    config.GetProperty("selectedFontName").GetString(),
+                    (float)config.GetProperty("selectedFontSize").GetDouble(),
+                    (FontStyle)config.GetProperty("selectedFontStyle").GetInt32()
+                );
+                selectedBrush = new SolidBrush(Color.FromArgb(config.GetProperty("fontColor").GetInt32()));
+
+                if (config.TryGetProperty("dragLeft", out var l) &&
+                    config.TryGetProperty("dragTop", out var t) &&
+                    config.TryGetProperty("dragWidth", out var w) &&
+                    config.TryGetProperty("dragHeight", out var h))
+                {
+                    dragPanel.Left = l.GetInt32();
+                    dragPanel.Top = t.GetInt32();
+                    dragPanel.Width = w.GetInt32();
+                    dragPanel.Height = h.GetInt32();
+                }
+
+                if (config.TryGetProperty("customFormatText", out var format))
+                {
+                    formatBox.Text = format.GetString();
+                }
+
+                // Load startHidden setting
+                if (config.TryGetProperty("startHidden", out var sh))
+                {
+                    startHidden = sh.GetBoolean();
+                }
+
+                UpdateStatusBar(); 
+                UpdatePreview();
             }
-            UpdateStatusBar(); 
-            UpdatePreview();
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to load configuration: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
 
@@ -632,8 +510,163 @@ Cores: {cores}";
             // Update the status bar panels
             previewPosLabel.Text = $"Preview: {previewX}, {previewY}";
             realPosLabel.Text = $"Scaled: {scaledX}, {scaledY}";
-
         }
+
+        #region System Tray Functionality
+
+        private void InitializeTrayIcon()
+        {
+            try
+            {
+                trayMenu = new ContextMenuStrip();
+
+                // Create tray menu items
+                // Refresh Wallpaper
+                var refreshItem = new ToolStripMenuItem("Refresh Wallpaper");
+                refreshItem.Click += (s, e) => {
+                    try { GenerateWallpaper(true); }
+                    catch (Exception ex) { MessageBox.Show("Error refreshing wallpaper: " + ex.Message); }
+                };
+
+                // Show/Hide GUI
+                var toggleGuiItem = new ToolStripMenuItem("Show/Hide GUI");
+                toggleGuiItem.Click += (s, e) => {
+                    if (this.Visible)
+                    {
+                        this.Hide();
+                        this.ShowInTaskbar = false;
+                    }
+                    else
+                    {
+                        this.Show();
+                        this.WindowState = FormWindowState.Normal;
+                        this.ShowInTaskbar = true;
+                        this.BringToFront();
+                    }
+                };
+
+                // Run on Startup (toggle)
+                var runStartupItem = new ToolStripMenuItem("Run on Startup")
+                {
+                    CheckOnClick = true
+                };
+                // Set initial state from registry
+                runStartupItem.Checked = IsStartupEnabled();
+                runStartupItem.Click += (s, e) =>
+                {
+                    bool enable = runStartupItem.Checked;
+                    try
+                    {
+                        UpdateStartupRegistry(enable);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Error updating startup setting: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                };
+
+                // Quit
+                var quitItem = new ToolStripMenuItem("Quit");
+                quitItem.Click += (s, e) => {
+                    trayIcon.Visible = false;
+                    Application.Exit();
+                };
+
+                // Add items to the tray menu
+                trayMenu.Items.AddRange(new ToolStripItem[] { refreshItem, toggleGuiItem, runStartupItem, quitItem });
+
+                // Initialize NotifyIcon
+                trayIcon = new NotifyIcon
+                {
+                    Text = "BGInfoClone",
+                    Icon = SystemIcons.Application,
+                    ContextMenuStrip = trayMenu,
+                    Visible = true
+                };
+
+                // Double-click toggles window visibility
+                trayIcon.DoubleClick += (s, e) => {
+                    if (this.Visible)
+                    {
+                        this.Hide();
+                        this.ShowInTaskbar = false;
+                    }
+                    else
+                    {
+                        this.Show();
+                        this.WindowState = FormWindowState.Normal;
+                        this.ShowInTaskbar = true;
+                        this.BringToFront();
+                    }
+                };
+            }
+            catch(Exception ex)
+            {
+                MessageBox.Show("Error initializing tray icon: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void MainForm_Load(object sender, EventArgs e)
+        {
+            if (startHidden)
+            {
+                this.WindowState = FormWindowState.Minimized;
+                this.ShowInTaskbar = false;
+                this.Hide();
+            }
+        }
+
+        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // Hide to tray instead of closing
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                this.Hide();
+                this.ShowInTaskbar = false;
+            }
+        }
+
+        private bool IsStartupEnabled()
+        {
+            try 
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", false))
+                {
+                    if (key == null) return false;
+                    string value = key.GetValue("BGInfoClone") as string;
+                    return !string.IsNullOrEmpty(value);
+                }
+            }
+            catch { return false; }
+        }
+
+        private void UpdateStartupRegistry(bool enable)
+        {
+            try 
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (key == null) throw new Exception("Unable to open registry key.");
+                    if (enable)
+                    {
+                        // Use the path to the executable; ensure it is properly quoted if it contains spaces.
+                        string exePath = "\"" + Application.ExecutablePath + "\"";
+                        key.SetValue("BGInfoClone", exePath);
+                    }
+                    else
+                    {
+                        key.DeleteValue("BGInfoClone", false);
+                    }
+                }
+            }
+            catch(Exception ex)
+            {
+                throw new Exception("Failed to update startup registry: " + ex.Message);
+            }
+        }
+
+        #endregion
     }
 
     static class Program
