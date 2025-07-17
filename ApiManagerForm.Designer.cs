@@ -1,4 +1,3 @@
-
 namespace BgInfoClone
 {
     partial class ApiManagerForm
@@ -27,6 +26,7 @@ namespace BgInfoClone
             this.btnAddOrUpdate = new System.Windows.Forms.Button();
             this.btnDelete = new System.Windows.Forms.Button();
             this.btnTest = new System.Windows.Forms.Button();
+            this.btnTestMatch = new System.Windows.Forms.Button();
             this.btnClose = new System.Windows.Forms.Button();
             this.SuspendLayout();
             //
@@ -97,39 +97,46 @@ namespace BgInfoClone
             //
             // btnAddOrUpdate
             //
-            this.btnAddOrUpdate.Location = new System.Drawing.Point(230, 215);
-            this.btnAddOrUpdate.Size = new System.Drawing.Size(90, 25);
-            this.btnAddOrUpdate.Text = "Add / Update";
+            this.btnAddOrUpdate.Location = new System.Drawing.Point(230, 245);
+            this.btnAddOrUpdate.Size = new System.Drawing.Size(60, 25);
+            this.btnAddOrUpdate.Text = "Apply";
             this.btnAddOrUpdate.Click += new System.EventHandler(this.btnAddOrUpdate_Click);
             //
             // btnDelete
             //
-            this.btnDelete.Location = new System.Drawing.Point(330, 215);
+            this.btnDelete.Location = new System.Drawing.Point(295, 245);
             this.btnDelete.Size = new System.Drawing.Size(60, 25);
             this.btnDelete.Text = "Delete";
             this.btnDelete.Click += new System.EventHandler(this.btnDelete_Click);
             //
             // btnTest
             //
-            this.btnTest.Location = new System.Drawing.Point(400, 215);
-            this.btnTest.Size = new System.Drawing.Size(60, 25);
-            this.btnTest.Text = "Test";
+            this.btnTest.Location = new System.Drawing.Point(230, 215);
+            this.btnTest.Size = new System.Drawing.Size(150, 25);
+            this.btnTest.Text = "Test Endpoint";
             this.btnTest.Click += new System.EventHandler(this.btnTest_Click);
+            //
+            // btnTestMatch
+            //
+            this.btnTestMatch.Location = new System.Drawing.Point(380, 215);
+            this.btnTestMatch.Size = new System.Drawing.Size(150, 25);
+            this.btnTestMatch.Text = "Test Match";
+            this.btnTestMatch.Click += new System.EventHandler(this.btnTestMatch_Click);
             //
             // btnClose
             //
-            this.btnClose.Location = new System.Drawing.Point(470, 215);
+            this.btnClose.Location = new System.Drawing.Point(470, 295);
             this.btnClose.Size = new System.Drawing.Size(60, 25);
             this.btnClose.Text = "Close";
             this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
             //
             // ApiManagerForm
             //
-            this.ClientSize = new System.Drawing.Size(550, 330);
+            this.ClientSize = new System.Drawing.Size(545, 330);
             this.Controls.AddRange(new System.Windows.Forms.Control[] {
                 this.listApis, this.txtName, this.txtUrl, this.comboMethod, this.comboAuth, this.comboFormat,
                 this.txtUsername, this.txtPassword, this.txtJsonKey, this.txtRegex,
-                this.btnAddOrUpdate, this.btnDelete, this.btnTest, this.btnClose });
+                this.btnAddOrUpdate, this.btnDelete, this.btnTest, this.btnTestMatch, this.btnClose });
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.Text = "API Manager";
             this.ResumeLayout(false);
@@ -149,6 +156,8 @@ namespace BgInfoClone
         private System.Windows.Forms.Button btnAddOrUpdate;
         private System.Windows.Forms.Button btnDelete;
         private System.Windows.Forms.Button btnTest;
+        private System.Windows.Forms.Button btnTestMatch;
         private System.Windows.Forms.Button btnClose;
+        private System.Windows.Forms.TextBox txtTimeout;
     }
 }

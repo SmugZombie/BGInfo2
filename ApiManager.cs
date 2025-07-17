@@ -35,18 +35,32 @@ namespace BgInfoClone
             }
         }
 
+        private static bool TryExtractJsonValue(JsonElement element, string[] path, out string result)
+        {
+            result = "";
+            foreach (var key in path)
+            {
+                if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(key, out var sub))
+                    element = sub;
+                else
+                    return false;
+            }
+            result = element.ToString();
+            return true;
+        }
+
         private void btnAddOrUpdate_Click(object sender, EventArgs e)
         {
             var conn = new ApiConnection
             {
                 Name = txtName.Text,
                 Url = txtUrl.Text,
-                Method = comboMethod.Text,
-                AuthType = comboAuth.Text,
+                Method = comboMethod.SelectedItem?.ToString() ?? "GET",
+                AuthType = comboAuth.SelectedItem?.ToString() ?? "None",
                 Username = txtUsername.Text,
                 PasswordOrToken = txtPassword.Text,
                 JsonKey = txtJsonKey.Text,
-                ContentType = comboFormat.Text,
+                ContentType = comboFormat.SelectedItem?.ToString() ?? "json",
                 RegexPattern = txtRegex.Text
             };
 
@@ -101,37 +115,92 @@ namespace BgInfoClone
             var contentType = comboFormat.Text;
             var regexPattern = txtRegex.Text;
 
+            int timeoutSeconds = 5; // default timeout
+
             try
             {
-                using var client = new HttpClient();
-
-                if (authType == "Basic")
+                if (!int.TryParse(txtTimeout.Text, out timeoutSeconds))
                 {
-                    var byteArray = Encoding.ASCII.GetBytes($"{username}:{passwordOrToken}");
-                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
-                }
-                else if (authType == "Bearer")
-                {
-                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", passwordOrToken);
+                    timeoutSeconds = 5;
                 }
 
-                HttpResponseMessage response = method == "POST"
-                    ? client.PostAsync(url, null).Result
-                    : client.GetAsync(url).Result;
+                string result;
 
-                string result = response.Content.ReadAsStringAsync().Result;
+                if (System.IO.File.Exists(url))
+                {
+                    // If URL is a local file path, read the file content with timeout
+                    using var fs = new FileStream(url, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var sr = new StreamReader(fs);
+                    var readTask = sr.ReadToEndAsync();
+                    if (!readTask.Wait(TimeSpan.FromSeconds(timeoutSeconds)))
+                    {
+                        MessageBox.Show("File read timed out.", "Timeout", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    result = readTask.Result;
+                }
+                else if (url.StartsWith("cmd://", StringComparison.OrdinalIgnoreCase))
+                {
+                    // If URL starts with cmd://, treat the rest as a command to execute with timeout
+                    string command = url.Substring(6);
+                    var processInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + command)
+                    {
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var process = System.Diagnostics.Process.Start(processInfo);
+                    if (!process.WaitForExit(timeoutSeconds * 1000))
+                    {
+                        process.Kill();
+                        MessageBox.Show("Command execution timed out.", "Timeout", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    result = process.StandardOutput.ReadToEnd();
+                }
+                else
+                {
+                    using var client = new HttpClient();
+                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
+                    if (authType == "Basic")
+                    {
+                        var byteArray = Encoding.ASCII.GetBytes($"{username}:{passwordOrToken}");
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+                    }
+                    else if (authType == "Bearer")
+                    {
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", passwordOrToken);
+                    }
+
+                    HttpResponseMessage response = method == "POST"
+                        ? client.PostAsync(url, null).Result
+                        : client.GetAsync(url).Result;
+
+                    result = response.Content.ReadAsStringAsync().Result;
+                }
+
                 string output = result;
 
                 if (contentType == "text" && !string.IsNullOrWhiteSpace(regexPattern))
                 {
-                    var match = Regex.Match(result, regexPattern);
-                    if (match.Success)
+                    try
                     {
-                        output = match.Groups.Count > 1 ? match.Groups[1].Value : match.Value;
+                        var regex = new Regex(regexPattern, RegexOptions.Multiline);
+                        var match = regex.Match(result);
+                        if (match.Success)
+                        {
+                            output = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
+                        }
+                        else
+                        {
+                            output = "(no match)";
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        output = "(no match)";
+                        MessageBox.Show("Regex error: " + ex.Message);
+                        output = "(regex error)";
                     }
                 }
 
@@ -140,6 +209,94 @@ namespace BgInfoClone
             catch (Exception ex)
             {
                 MessageBox.Show("Test failed:\n" + ex.Message);
+            }
+        }
+
+        private void btnTestMatch_Click(object sender, EventArgs e)
+        {
+            var url = txtUrl.Text;
+            var contentType = comboFormat.Text;
+            var jsonKey = txtJsonKey.Text;
+            var regexPattern = txtRegex.Text;
+
+            try
+            {
+                string result;
+
+                if (System.IO.File.Exists(url))
+                {
+                    result = System.IO.File.ReadAllText(url);
+                }
+                else if (url.StartsWith("cmd://", StringComparison.OrdinalIgnoreCase))
+                {
+                    string command = url.Substring(6);
+                    var processInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + command)
+                    {
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var process = System.Diagnostics.Process.Start(processInfo);
+                    result = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+                }
+                else
+                {
+                    using var client = new HttpClient();
+                    HttpResponseMessage response = client.GetAsync(url).Result;
+                    result = response.Content.ReadAsStringAsync().Result;
+                }
+
+                string output = result;
+
+                if (contentType == "json" && !string.IsNullOrWhiteSpace(jsonKey))
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(result);
+                        if (TryExtractJsonValue(doc.RootElement, jsonKey.Split('.'), out var extracted))
+                        {
+                            output = extracted;
+                        }
+                        else
+                        {
+                            output = "(no match)";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("JSON path error: " + ex.Message);
+                        output = "(json path error)";
+                    }
+                }
+                else if (contentType == "text" && !string.IsNullOrWhiteSpace(regexPattern))
+                {
+                    try
+                    {
+                        var regex = new Regex(regexPattern, RegexOptions.Multiline);
+                        var match = regex.Match(result);
+                        if (match.Success)
+                        {
+                            // Use first capturing group if exists, else whole match
+                            output = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
+                        }
+                        else
+                        {
+                            output = "(no match)";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Regex error: " + ex.Message);
+                        output = "(regex error)";
+                    }
+                }
+
+                MessageBox.Show("Extracted Result:\n" + output, "Test Match Result");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Test match failed:\n" + ex.Message);
             }
         }
 
