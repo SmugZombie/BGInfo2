@@ -107,28 +107,33 @@ namespace BgInfoClone
 
         private void btnTest_Click(object sender, EventArgs e)
         {
-            var url = txtUrl.Text;
-            var method = comboMethod.Text.ToUpper();
-            var authType = comboAuth.Text;
-            var username = txtUsername.Text;
-            var passwordOrToken = txtPassword.Text;
-            var contentType = comboFormat.Text;
-            var regexPattern = txtRegex.Text;
+            var url = txtUrl?.Text;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                MessageBox.Show("URL cannot be empty.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
-            int timeoutSeconds = 5; // default timeout
+            var method = comboMethod?.Text?.ToUpper() ?? "GET";
+            var authType = comboAuth?.Text ?? "None";
+            var username = txtUsername?.Text;
+            var passwordOrToken = txtPassword?.Text;
+            var contentType = comboFormat?.Text ?? "json";
+            var regexPattern = txtRegex?.Text;
+
+            int timeoutSeconds = 5; // Default timeout
+            if (txtTimeout == null || string.IsNullOrWhiteSpace(txtTimeout.Text) || !int.TryParse(txtTimeout.Text, out timeoutSeconds) || timeoutSeconds <= 0)
+            {
+                timeoutSeconds = 5;
+            }
 
             try
             {
-                if (!int.TryParse(txtTimeout.Text, out timeoutSeconds))
-                {
-                    timeoutSeconds = 5;
-                }
-
                 string result;
 
                 if (System.IO.File.Exists(url))
                 {
-                    // If URL is a local file path, read the file content with timeout
+                    Console.WriteLine("Reading local file: " + url);
                     using var fs = new FileStream(url, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     using var sr = new StreamReader(fs);
                     var readTask = sr.ReadToEndAsync();
@@ -141,7 +146,7 @@ namespace BgInfoClone
                 }
                 else if (url.StartsWith("cmd://", StringComparison.OrdinalIgnoreCase))
                 {
-                    // If URL starts with cmd://, treat the rest as a command to execute with timeout
+                    Console.WriteLine("Executing command: " + url);
                     string command = url.Substring(6);
                     var processInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + command)
                     {
@@ -160,6 +165,7 @@ namespace BgInfoClone
                 }
                 else
                 {
+                    Console.WriteLine("Making HTTP request to: " + url);
                     using var client = new HttpClient();
                     client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
 
@@ -177,38 +183,22 @@ namespace BgInfoClone
                         ? client.PostAsync(url, null).Result
                         : client.GetAsync(url).Result;
 
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        MessageBox.Show($"HTTP request failed with status code: {response.StatusCode}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
                     result = response.Content.ReadAsStringAsync().Result;
                 }
 
                 string output = result;
 
-                if (contentType == "text" && !string.IsNullOrWhiteSpace(regexPattern))
-                {
-                    try
-                    {
-                        var regex = new Regex(regexPattern, RegexOptions.Multiline);
-                        var match = regex.Match(result);
-                        if (match.Success)
-                        {
-                            output = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
-                        }
-                        else
-                        {
-                            output = "(no match)";
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("Regex error: " + ex.Message);
-                        output = "(regex error)";
-                    }
-                }
-
-                MessageBox.Show("Extracted Result:\n" + output, "Test Result");
+                MessageBox.Show(output, "Test Result");
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Test failed:\n" + ex.Message);
+                MessageBox.Show("Test failed:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -218,6 +208,12 @@ namespace BgInfoClone
             var contentType = comboFormat.Text;
             var jsonKey = txtJsonKey.Text;
             var regexPattern = txtRegex.Text;
+            var method = comboMethod.Text.ToUpper();
+            var authType = comboAuth.Text;
+            var username = txtUsername.Text;
+            var passwordOrToken = txtPassword.Text;
+
+            int timeoutSeconds = 5; // default timeout
 
             try
             {
@@ -243,7 +239,22 @@ namespace BgInfoClone
                 else
                 {
                     using var client = new HttpClient();
-                    HttpResponseMessage response = client.GetAsync(url).Result;
+                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
+                    if (authType == "Basic")
+                    {
+                        var byteArray = Encoding.ASCII.GetBytes($"{username}:{passwordOrToken}");
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+                    }
+                    else if (authType == "Bearer")
+                    {
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", passwordOrToken);
+                    }
+
+                    HttpResponseMessage response = method == "POST"
+                        ? client.PostAsync(url, null).Result
+                        : client.GetAsync(url).Result;
+
                     result = response.Content.ReadAsStringAsync().Result;
                 }
 
@@ -290,6 +301,11 @@ namespace BgInfoClone
                         MessageBox.Show("Regex error: " + ex.Message);
                         output = "(regex error)";
                     }
+                }
+                else if (contentType == "text" && string.IsNullOrWhiteSpace(regexPattern))
+                {
+                    // If no regex pattern is provided, just return the raw text
+                    output = result;
                 }
 
                 MessageBox.Show("Extracted Result:\n" + output, "Test Match Result");

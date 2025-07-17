@@ -3,6 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Forms;
@@ -264,6 +265,9 @@ namespace BgInfoClone
             var ip = GetLocalIPAddress();
             var os = Environment.OSVersion.ToString();
             var cores = Environment.ProcessorCount.ToString();
+            string result;
+
+            int timeoutSeconds = 5; // default timeout
 
             string info = template
                 .Replace("{hostname}", hostname)
@@ -278,9 +282,109 @@ namespace BgInfoClone
 
                 if (!info.Contains(tag)) continue;
 
+                string url = conn.Url;
+                var contentType = conn.ContentType;
+                var jsonKey = conn.JsonKey;
+                var regexPattern = conn.RegexPattern;
+                var method = conn.Method.ToUpper();
+                var authType = conn.AuthType;
+                var username = conn.Username;
+                var passwordOrToken = conn.PasswordOrToken;
+
                 try
                 {
+                    if (System.IO.File.Exists(url))
+                {
+                    result = System.IO.File.ReadAllText(url);
+                }
+                else if (url.StartsWith("cmd://", StringComparison.OrdinalIgnoreCase))
+                {
+                    string command = url.Substring(6);
+                    var processInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + command)
+                    {
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var process = System.Diagnostics.Process.Start(processInfo);
+                    result = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+                }
+                else
+                {
                     using var client = new HttpClient();
+                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
+                    if (authType == "Basic")
+                    {
+                        var byteArray = Encoding.ASCII.GetBytes($"{username}:{passwordOrToken}");
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+                    }
+                    else if (authType == "Bearer")
+                    {
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", passwordOrToken);
+                    }
+
+                    HttpResponseMessage response = method == "POST"
+                        ? client.PostAsync(url, null).Result
+                        : client.GetAsync(url).Result;
+
+                    result = response.Content.ReadAsStringAsync().Result;
+                }
+
+                string output = result;
+
+                if (contentType == "json" && !string.IsNullOrWhiteSpace(jsonKey))
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(result);
+                        if (TryExtractJsonValue(doc.RootElement, jsonKey.Split('.'), out var extracted))
+                        {
+                            output = extracted;
+                        }
+                        else
+                        {
+                            output = "(no match)";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("JSON path error: " + ex.Message);
+                        output = "(json path error)";
+                    }
+                }
+                else if (contentType == "text" && !string.IsNullOrWhiteSpace(regexPattern))
+                {
+                    try
+                    {
+                        var regex = new Regex(regexPattern, RegexOptions.Multiline);
+                        var match = regex.Match(result);
+                        if (match.Success)
+                        {
+                            // Use first capturing group if exists, else whole match
+                            output = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
+                        }
+                        else
+                        {
+                            output = "(no match)";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Regex error: " + ex.Message);
+                        output = "(regex error)";
+                    }
+                }
+                else if (contentType == "text" && string.IsNullOrWhiteSpace(regexPattern))
+                {
+                    // If no regex pattern is provided, just return the raw text
+                    output = result;
+                }
+
+                string value = output.Trim();
+                info = info.Replace(tag, value);
+                    /*using var client = new HttpClient();
 
                     if (conn.AuthType == "Basic")
                     {
@@ -315,14 +419,19 @@ namespace BgInfoClone
                     {
                         try
                         {
-                            var match = Regex.Match(result, conn.RegexPattern, RegexOptions.Multiline);
-                            if (match.Success)
+                            if(conn.RegexPattern == null || conn.RegexPattern.Trim() == "")
                             {
-                                value = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
-                            }
-                            else
-                            {
-                                value = "(no match)";
+                                value = result; // No regex, use raw text
+                            }else{
+                                var match = Regex.Match(result, conn.RegexPattern, RegexOptions.Multiline);
+                                if (match.Success)
+                                {
+                                    value = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
+                                }
+                                else
+                                {
+                                    value = "(no match)";
+                                }
                             }
                         }
                         catch (Exception ex)
@@ -335,6 +444,7 @@ namespace BgInfoClone
                     System.Diagnostics.Debug.WriteLine($"API '{conn.Name}' extracted value: {value}");
 
                     info = info.Replace(tag, value);
+                    */
                 }
                 catch (Exception ex)
                 {
