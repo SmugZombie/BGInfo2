@@ -107,50 +107,56 @@ namespace BgInfoClone
                 string newImagePath = Path.Combine(Path.GetTempPath(), "bginfo_clone_wallpaper.jpg");
 
                 using (var original = new Bitmap(wallpaperPath))
-                using (var graphics = Graphics.FromImage(original))
                 {
-                    graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                    string info = GetSystemInfo();
-                    
-                    float xRatio = (float)screenWidth / previewBox.Width;
-                    float yRatio = (float)screenHeight / previewBox.Height;
-
-                    Point scaledLocation = new Point(
-                        (int)(dragPanel.Left * xRatio),
-                        (int)(dragPanel.Top * yRatio)
-                    );
-
-
-                    graphics.DrawString(info, selectedFont, selectedBrush, scaledLocation);
-
-                    if (File.Exists(newImagePath))
+                    // Create a new bitmap with screen resolution for consistent scaling
+                    using (var screenSizedBitmap = new Bitmap(screenWidth, screenHeight))
+                    using (var graphics = Graphics.FromImage(screenSizedBitmap))
                     {
-                        try { File.Delete(newImagePath); } catch { }
-                    }
+                        // Draw the original wallpaper stretched to screen size
+                        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        graphics.DrawImage(original, 0, 0, screenWidth, screenHeight);
+                        
+                        graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                        string info = GetSystemInfo();
+                        
+                        // Calculate scaling ratios from preview to screen coordinates
+                        float xRatio = (float)screenWidth / previewBox.Width;
+                        float yRatio = (float)screenHeight / previewBox.Height;
 
-                    original.Save(newImagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                        Point scaledLocation = new Point(
+                            (int)(dragPanel.Left * xRatio),
+                            (int)(dragPanel.Top * yRatio)
+                        );
 
-                    // Ensure we dispose previous image to unlock the file
-                    if (previewBox.Image != null)
-                    {
-                        previewBox.Image.Dispose();
-                        previewBox.Image = null;
-                    }
+                        graphics.DrawString(info, selectedFont, selectedBrush, scaledLocation);
 
-                    using (var fs = new FileStream(newImagePath, FileMode.Open, FileAccess.Read))
-                    using (var originalBitmap = new Bitmap(fs))
-                    {
-                        Bitmap scaled = new Bitmap(previewBox.Width, previewBox.Height);
-                        using (Graphics g = Graphics.FromImage(scaled))
+                        if (File.Exists(newImagePath))
                         {
-                            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                            g.DrawImage(originalBitmap, 0, 0, scaled.Width, scaled.Height);
+                            try { File.Delete(newImagePath); } catch { }
                         }
 
-                        previewBox.Image = scaled;
+                        screenSizedBitmap.Save(newImagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                    }
+                }
+
+                // Update preview with the generated wallpaper
+                if (previewBox.Image != null)
+                {
+                    previewBox.Image.Dispose();
+                    previewBox.Image = null;
+                }
+
+                using (var fs = new FileStream(newImagePath, FileMode.Open, FileAccess.Read))
+                using (var originalBitmap = new Bitmap(fs))
+                {
+                    Bitmap scaled = new Bitmap(previewBox.Width, previewBox.Height);
+                    using (Graphics g = Graphics.FromImage(scaled))
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.DrawImage(originalBitmap, 0, 0, scaled.Width, scaled.Height);
                     }
 
-
+                    previewBox.Image = scaled;
                 }
 
                 SetWallpaper(newImagePath);
