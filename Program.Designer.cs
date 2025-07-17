@@ -128,10 +128,24 @@ namespace BgInfoClone
                 {
                     apiConnections = form.UpdatedConnections;
                     SaveApiConnections();
+                    PopulateAvailableVariables(); // Refresh variables list
+                }
+            };
+
+            ToolStripMenuItem settingsItem = new ToolStripMenuItem("⚙️ Settings");
+            settingsItem.Click += (s, e) =>
+            {
+                using var settingsForm = new SettingsForm(refreshIntervalMinutes);
+                if (settingsForm.ShowDialog() == DialogResult.OK)
+                {
+                    refreshIntervalMinutes = settingsForm.RefreshIntervalMinutes;
+                    updateTimer.Interval = refreshIntervalMinutes * 60 * 1000;
+                    SaveConfig();
                 }
             };
             
             toolsMenu.DropDownItems.Add(manageApisItem);
+            toolsMenu.DropDownItems.Add(settingsItem);
             
             menuStrip.Items.AddRange(new ToolStripItem[] { fileMenu, editMenu, toolsMenu });
             
@@ -179,6 +193,7 @@ namespace BgInfoClone
                 {
                     apiConnections = form.UpdatedConnections;
                     SaveApiConnections();
+                    PopulateAvailableVariables(); // Refresh variables list
                 }
             };
             
@@ -364,12 +379,13 @@ Cores: {cores}";
                 using var pen = new Pen(Color.Red, 2);
                 g.DrawRectangle(pen, 0, 0, dragPanel.Width - 1, dragPanel.Height - 1);
 
-                string previewText = GetSystemInfo();
+                // Placeholder text instead of processing variables
+                string placeholderText = "Drag me (placeholder)";
                 using var brush = new SolidBrush(Color.Red);
                 Color background = Color.FromArgb(100, 255, 255, 255);
                 e.Graphics.FillRectangle(new SolidBrush(background), 0, 0, dragPanel.Width, dragPanel.Height);
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                g.DrawString(previewText, selectedFont, brush, new PointF(0, 0));
+                g.DrawString(placeholderText, selectedFont, brush, new PointF(0, 0));
             };
 
             dragPanel.MouseDown += (s, e) => dragOffset = e.Location;

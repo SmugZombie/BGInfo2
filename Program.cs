@@ -34,6 +34,7 @@ namespace BgInfoClone
         private int previewWidth;
         private int previewHeight;
         private bool startHidden = false;
+        private int refreshIntervalMinutes = 30; // Default 30 minutes
 
         // System tray fields
         private NotifyIcon trayIcon;
@@ -395,7 +396,8 @@ namespace BgInfoClone
                     dragWidth = dragPanel.Width,
                     dragHeight = dragPanel.Height,
                     customFormatText = formatBox.Text,
-                    startHidden
+                    startHidden,
+                    refreshIntervalMinutes
                 };
 
                 File.WriteAllText(ConfigPath, JsonSerializer.Serialize(config));

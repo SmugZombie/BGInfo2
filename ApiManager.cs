@@ -35,6 +35,20 @@ namespace BgInfoClone
             }
         }
 
+        private static bool TryExtractJsonValue(JsonElement element, string[] path, out string result)
+        {
+            result = "";
+            foreach (var key in path)
+            {
+                if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(key, out var sub))
+                    element = sub;
+                else
+                    return false;
+            }
+            result = element.ToString();
+            return true;
+        }
+
         private void btnAddOrUpdate_Click(object sender, EventArgs e)
         {
             var conn = new ApiConnection
@@ -103,35 +117,68 @@ namespace BgInfoClone
 
             try
             {
-                using var client = new HttpClient();
+                string result;
 
-                if (authType == "Basic")
+                if (System.IO.File.Exists(url))
                 {
-                    var byteArray = Encoding.ASCII.GetBytes($"{username}:{passwordOrToken}");
-                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+                    // If URL is a local file path, read the file content
+                    result = System.IO.File.ReadAllText(url);
                 }
-                else if (authType == "Bearer")
+                else if (url.StartsWith("cmd://", StringComparison.OrdinalIgnoreCase))
                 {
-                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", passwordOrToken);
+                    // If URL starts with cmd://, treat the rest as a command to execute
+                    string command = url.Substring(6);
+                    var processInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + command)
+                    {
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var process = System.Diagnostics.Process.Start(processInfo);
+                    result = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+                }
+                else
+                {
+                    using var client = new HttpClient();
+
+                    if (authType == "Basic")
+                    {
+                        var byteArray = Encoding.ASCII.GetBytes($"{username}:{passwordOrToken}");
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+                    }
+                    else if (authType == "Bearer")
+                    {
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", passwordOrToken);
+                    }
+
+                    HttpResponseMessage response = method == "POST"
+                        ? client.PostAsync(url, null).Result
+                        : client.GetAsync(url).Result;
+
+                    result = response.Content.ReadAsStringAsync().Result;
                 }
 
-                HttpResponseMessage response = method == "POST"
-                    ? client.PostAsync(url, null).Result
-                    : client.GetAsync(url).Result;
-
-                string result = response.Content.ReadAsStringAsync().Result;
                 string output = result;
 
                 if (contentType == "text" && !string.IsNullOrWhiteSpace(regexPattern))
                 {
-                    var match = Regex.Match(result, regexPattern);
-                    if (match.Success)
+                    try
                     {
-                        output = match.Groups.Count > 1 ? match.Groups[1].Value : match.Value;
+                        var match = Regex.Match(result, regexPattern);
+                        if (match.Success)
+                        {
+                            output = match.Groups.Count > 1 ? match.Groups[1].Value : match.Value;
+                        }
+                        else
+                        {
+                            output = "(no match)";
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        output = "(no match)";
+                        MessageBox.Show("Regex error: " + ex.Message);
+                        output = "(regex error)";
                     }
                 }
 
@@ -140,6 +187,92 @@ namespace BgInfoClone
             catch (Exception ex)
             {
                 MessageBox.Show("Test failed:\n" + ex.Message);
+            }
+        }
+
+        private void btnTestMatch_Click(object sender, EventArgs e)
+        {
+            var url = txtUrl.Text;
+            var contentType = comboFormat.Text;
+            var jsonKey = txtJsonKey.Text;
+            var regexPattern = txtRegex.Text;
+
+            try
+            {
+                string result;
+
+                if (System.IO.File.Exists(url))
+                {
+                    result = System.IO.File.ReadAllText(url);
+                }
+                else if (url.StartsWith("cmd://", StringComparison.OrdinalIgnoreCase))
+                {
+                    string command = url.Substring(6);
+                    var processInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + command)
+                    {
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var process = System.Diagnostics.Process.Start(processInfo);
+                    result = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+                }
+                else
+                {
+                    using var client = new HttpClient();
+                    HttpResponseMessage response = client.GetAsync(url).Result;
+                    result = response.Content.ReadAsStringAsync().Result;
+                }
+
+                string output = result;
+
+                if (contentType == "json" && !string.IsNullOrWhiteSpace(jsonKey))
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(result);
+                        if (TryExtractJsonValue(doc.RootElement, jsonKey.Split('.'), out var extracted))
+                        {
+                            output = extracted;
+                        }
+                        else
+                        {
+                            output = "(no match)";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("JSON path error: " + ex.Message);
+                        output = "(json path error)";
+                    }
+                }
+                else if (contentType == "text" && !string.IsNullOrWhiteSpace(regexPattern))
+                {
+                    try
+                    {
+                        var match = Regex.Match(result, regexPattern);
+                        if (match.Success)
+                        {
+                            output = match.Groups.Count > 1 ? match.Groups[1].Value : match.Value;
+                        }
+                        else
+                        {
+                            output = "(no match)";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Regex error: " + ex.Message);
+                        output = "(regex error)";
+                    }
+                }
+
+                MessageBox.Show("Extracted Result:\n" + output, "Test Match Result");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Test match failed:\n" + ex.Message);
             }
         }
 
