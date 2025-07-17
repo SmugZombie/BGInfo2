@@ -367,7 +367,7 @@ Cores: {cores}";
             {
                 BackColor = Color.Transparent,
                 Location = new Point(0, 0), // Start at top-left of preview (0,0)
-                Size = new Size(500, 100),
+                Size = new Size(250, 100),
                 Parent = previewBox,
                 Cursor = Cursors.SizeAll
             };
@@ -376,16 +376,22 @@ Cores: {cores}";
             dragPanel.Paint += (s, e) =>
             {
                 var g = e.Graphics;
+                float scaledFontSize = selectedFont.Size * 0.5f;
+
                 using var pen = new Pen(Color.Red, 2);
                 g.DrawRectangle(pen, 0, 0, dragPanel.Width - 1, dragPanel.Height - 1);
 
                 // Placeholder text instead of processing variables
-                string placeholderText = "Drag me (placeholder)";
+                string placeholderText = formatBox.Text.Length > 0 ? formatBox.Text : "Drag to position text here";
                 using var brush = new SolidBrush(Color.Red);
                 Color background = Color.FromArgb(100, 255, 255, 255);
                 e.Graphics.FillRectangle(new SolidBrush(background), 0, 0, dragPanel.Width, dragPanel.Height);
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                g.DrawString(placeholderText, selectedFont, brush, new PointF(0, 0));
+                
+                using (Font scaledFont = new Font(selectedFont.FontFamily, scaledFontSize, selectedFont.Style))
+                {
+                    g.DrawString(placeholderText, scaledFont, brush, new PointF(0, 0));
+                }
             };
 
             dragPanel.MouseDown += (s, e) => dragOffset = e.Location;
