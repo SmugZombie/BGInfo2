@@ -48,6 +48,7 @@ namespace BgInfoClone
         {
             // Load API connections before UI initialization
             LoadApiConnections();
+            this.Icon = new Icon("Resources/icon.ico");
             
             // Calculate preview dimensions
             float scale = 0.5f;
@@ -384,67 +385,6 @@ namespace BgInfoClone
 
                 string value = output.Trim();
                 info = info.Replace(tag, value);
-                    /*using var client = new HttpClient();
-
-                    if (conn.AuthType == "Basic")
-                    {
-                        var byteArray = Encoding.ASCII.GetBytes($"{conn.Username}:{conn.PasswordOrToken}");
-                        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
-                    }
-                    else if (conn.AuthType == "Bearer")
-                    {
-                        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", conn.PasswordOrToken);
-                    }
-
-                    var requestTask = conn.Method == "POST"
-                        ? client.PostAsync(conn.Url, null)
-                        : client.GetAsync(conn.Url);
-
-                    var response = requestTask.Result;
-                    string result = response.Content.ReadAsStringAsync().Result;
-                    string value = "(error)";
-
-                    // Debug logging
-                    System.Diagnostics.Debug.WriteLine($"API '{conn.Name}' response: {result}");
-
-                    if (conn.ContentType == "json")
-                    {
-                        using var doc = JsonDocument.Parse(result);
-                        if (TryExtractJsonValue(doc.RootElement, conn.JsonKey.Split('.'), out var extracted))
-                        {
-                            value = extracted;
-                        }
-                    }
-                    else if (conn.ContentType == "text")
-                    {
-                        try
-                        {
-                            if(conn.RegexPattern == null || conn.RegexPattern.Trim() == "")
-                            {
-                                value = result; // No regex, use raw text
-                            }else{
-                                var match = Regex.Match(result, conn.RegexPattern, RegexOptions.Multiline);
-                                if (match.Success)
-                                {
-                                    value = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
-                                }
-                                else
-                                {
-                                    value = "(no match)";
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Regex error for API '{conn.Name}': {ex.Message}");
-                            value = "(regex error)";
-                        }
-                    }
-
-                    System.Diagnostics.Debug.WriteLine($"API '{conn.Name}' extracted value: {value}");
-
-                    info = info.Replace(tag, value);
-                    */
                 }
                 catch (Exception ex)
                 {
@@ -678,6 +618,26 @@ namespace BgInfoClone
                 };
 
                 // Run on Startup (toggle)
+                var startMinimized = new ToolStripMenuItem("Start Minimized")
+                {
+                    CheckOnClick = true
+                };
+                // Set initial state from registry
+                startMinimized.Checked = IsStartMinimized();
+                startMinimized.Click += (s, e) =>
+                {
+                    bool enable = startMinimized.Checked;
+                    try
+                    {
+                        UpdateStartMinimized(enable);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Error updating startup setting: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                };
+
+                // Run on Startup (toggle)
                 var runStartupItem = new ToolStripMenuItem("Run on Startup")
                 {
                     CheckOnClick = true
@@ -705,13 +665,13 @@ namespace BgInfoClone
                 };
 
                 // Add items to the tray menu
-                trayMenu.Items.AddRange(new ToolStripItem[] { refreshItem, toggleGuiItem, runStartupItem, quitItem });
+                trayMenu.Items.AddRange(new ToolStripItem[] { refreshItem, toggleGuiItem, new ToolStripSeparator(), startMinimized, runStartupItem, new ToolStripSeparator(), quitItem });
 
                 // Initialize NotifyIcon
                 trayIcon = new NotifyIcon
                 {
                     Text = "BGInfoClone",
-                    Icon = SystemIcons.Application,
+                    Icon = new Icon("Resources/icon.ico"), // Replace with the path to your .ico file
                     ContextMenuStrip = trayMenu,
                     Visible = true
                 };
@@ -771,6 +731,26 @@ namespace BgInfoClone
                 }
             }
             catch { return false; }
+        }
+
+        private bool IsStartMinimized()
+        {
+            // Get value from config
+            return startHidden;
+        }
+
+        private void UpdateStartMinimized(bool enable)
+        {
+            try 
+            {
+                startHidden = enable;
+                // Save the setting to the config file
+                SaveConfig();
+            }
+            catch(Exception ex)
+            {
+                throw new Exception("Failed to update start minimized setting: " + ex.Message);
+            }
         }
 
         private void UpdateStartupRegistry(bool enable)

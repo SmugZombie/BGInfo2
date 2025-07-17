@@ -86,12 +86,15 @@ namespace BgInfoClone
             ToolStripMenuItem loadConfigItem = new ToolStripMenuItem("📂 Load Config");
             loadConfigItem.Click += (s, e) => LoadConfig();
             
-            ToolStripMenuItem exitItem = new ToolStripMenuItem("❌ Exit");
-            exitItem.Click += (s, e) => this.Close();
+            ToolStripMenuItem minimizeItem = new ToolStripMenuItem("🤏 Minimize");
+            minimizeItem.Click += (s, e) => this.Close();
+
+            ToolStripMenuItem quitItem = new ToolStripMenuItem("❌ Quit");
+            quitItem.Click += (s, e) => Application.Exit();
             
             fileMenu.DropDownItems.AddRange(new ToolStripItem[] {
                 selectWallpaperItem, updateWallpaperItem, new ToolStripSeparator(),
-                saveConfigItem, loadConfigItem, new ToolStripSeparator(), exitItem
+                saveConfigItem, loadConfigItem, new ToolStripSeparator(), minimizeItem, new ToolStripSeparator(), quitItem
             });
             
             // Edit menu
