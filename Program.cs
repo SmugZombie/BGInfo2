@@ -300,6 +300,9 @@ namespace BgInfoClone
                     string result = response.Content.ReadAsStringAsync().Result;
                     string value = "(error)";
 
+                    // Debug logging
+                    System.Diagnostics.Debug.WriteLine($"API '{conn.Name}' response: {result}");
+
                     if (conn.ContentType == "json")
                     {
                         using var doc = JsonDocument.Parse(result);
@@ -310,21 +313,32 @@ namespace BgInfoClone
                     }
                     else if (conn.ContentType == "text")
                     {
-                        var match = Regex.Match(result, conn.RegexPattern);
-                        if (match.Success)
+                        try
                         {
-                            value = match.Groups.Count > 1 ? match.Groups[1].Value : match.Value;
+                            var match = Regex.Match(result, conn.RegexPattern, RegexOptions.Multiline);
+                            if (match.Success)
+                            {
+                                value = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
+                            }
+                            else
+                            {
+                                value = "(no match)";
+                            }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            value = "(no match)";
+                            System.Diagnostics.Debug.WriteLine($"Regex error for API '{conn.Name}': {ex.Message}");
+                            value = "(regex error)";
                         }
                     }
 
+                    System.Diagnostics.Debug.WriteLine($"API '{conn.Name}' extracted value: {value}");
+
                     info = info.Replace(tag, value);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"Error processing API '{conn.Name}': {ex.Message}");
                     info = info.Replace(tag, "(error)");
                 }
             }
@@ -679,13 +693,25 @@ namespace BgInfoClone
 
     static class Program
     {
+        private static System.Threading.Mutex? mutex;
+
         [STAThread]
         static void Main()
         {
+            bool createdNew;
+            mutex = new System.Threading.Mutex(true, "BgInfoCloneSingletonMutex", out createdNew);
+            if (!createdNew)
+            {
+                MessageBox.Show("Another instance of BGInfoClone is already running.", "Instance Running", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             Application.SetHighDpiMode(HighDpiMode.SystemAware);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
+
+            mutex.ReleaseMutex();
         }
     }
 }

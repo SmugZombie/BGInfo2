@@ -55,12 +55,12 @@ namespace BgInfoClone
             {
                 Name = txtName.Text,
                 Url = txtUrl.Text,
-                Method = comboMethod.Text,
-                AuthType = comboAuth.Text,
+                Method = comboMethod.SelectedItem?.ToString() ?? "GET",
+                AuthType = comboAuth.SelectedItem?.ToString() ?? "None",
                 Username = txtUsername.Text,
                 PasswordOrToken = txtPassword.Text,
                 JsonKey = txtJsonKey.Text,
-                ContentType = comboFormat.Text,
+                ContentType = comboFormat.SelectedItem?.ToString() ?? "json",
                 RegexPattern = txtRegex.Text
             };
 
@@ -115,18 +115,33 @@ namespace BgInfoClone
             var contentType = comboFormat.Text;
             var regexPattern = txtRegex.Text;
 
+            int timeoutSeconds = 5; // default timeout
+
             try
             {
+                if (!int.TryParse(txtTimeout.Text, out timeoutSeconds))
+                {
+                    timeoutSeconds = 5;
+                }
+
                 string result;
 
                 if (System.IO.File.Exists(url))
                 {
-                    // If URL is a local file path, read the file content
-                    result = System.IO.File.ReadAllText(url);
+                    // If URL is a local file path, read the file content with timeout
+                    using var fs = new FileStream(url, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var sr = new StreamReader(fs);
+                    var readTask = sr.ReadToEndAsync();
+                    if (!readTask.Wait(TimeSpan.FromSeconds(timeoutSeconds)))
+                    {
+                        MessageBox.Show("File read timed out.", "Timeout", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    result = readTask.Result;
                 }
                 else if (url.StartsWith("cmd://", StringComparison.OrdinalIgnoreCase))
                 {
-                    // If URL starts with cmd://, treat the rest as a command to execute
+                    // If URL starts with cmd://, treat the rest as a command to execute with timeout
                     string command = url.Substring(6);
                     var processInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + command)
                     {
@@ -135,12 +150,18 @@ namespace BgInfoClone
                         CreateNoWindow = true
                     };
                     using var process = System.Diagnostics.Process.Start(processInfo);
+                    if (!process.WaitForExit(timeoutSeconds * 1000))
+                    {
+                        process.Kill();
+                        MessageBox.Show("Command execution timed out.", "Timeout", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
                     result = process.StandardOutput.ReadToEnd();
-                    process.WaitForExit();
                 }
                 else
                 {
                     using var client = new HttpClient();
+                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
 
                     if (authType == "Basic")
                     {
@@ -165,10 +186,11 @@ namespace BgInfoClone
                 {
                     try
                     {
-                        var match = Regex.Match(result, regexPattern);
+                        var regex = new Regex(regexPattern, RegexOptions.Multiline);
+                        var match = regex.Match(result);
                         if (match.Success)
                         {
-                            output = match.Groups.Count > 1 ? match.Groups[1].Value : match.Value;
+                            output = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
                         }
                         else
                         {
@@ -251,10 +273,12 @@ namespace BgInfoClone
                 {
                     try
                     {
-                        var match = Regex.Match(result, regexPattern);
+                        var regex = new Regex(regexPattern, RegexOptions.Multiline);
+                        var match = regex.Match(result);
                         if (match.Success)
                         {
-                            output = match.Groups.Count > 1 ? match.Groups[1].Value : match.Value;
+                            // Use first capturing group if exists, else whole match
+                            output = match.Groups.Count > 1 && !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Value;
                         }
                         else
                         {
