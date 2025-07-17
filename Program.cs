@@ -10,6 +10,8 @@ using System.Windows.Forms;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using System.Drawing;
+using System.Reflection;
 
 namespace BgInfoClone
 {
@@ -48,8 +50,19 @@ namespace BgInfoClone
         {
             // Load API connections before UI initialization
             LoadApiConnections();
-            this.Icon = new Icon("Resources/icon.ico");
-            
+
+            // Load the embedded icon resource
+            var assembly = Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream("BgInfoClone.Resources.icon.ico");
+            if (stream != null)
+            {
+                this.Icon = new Icon(stream); // Set the form's icon
+            }
+            else
+            {
+                //MessageBox.Show("Icon resource not found!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+                        
             // Calculate preview dimensions
             float scale = 0.5f;
             previewWidth = (int)(screenWidth * scale);
@@ -667,11 +680,19 @@ namespace BgInfoClone
                 // Add items to the tray menu
                 trayMenu.Items.AddRange(new ToolStripItem[] { refreshItem, toggleGuiItem, new ToolStripSeparator(), startMinimized, runStartupItem, new ToolStripSeparator(), quitItem });
 
+                var assembly = Assembly.GetExecutingAssembly();
+                var icon = SystemIcons.Application; // Default icon if resource not found
+                using var stream = assembly.GetManifestResourceStream("BgInfoClone.Resources.icon.ico");
+                if (stream != null)
+                {
+                    icon = new Icon(stream); // Set the form's icon
+                }
+
                 // Initialize NotifyIcon
                 trayIcon = new NotifyIcon
                 {
                     Text = "BGInfoClone",
-                    Icon = new Icon("Resources/icon.ico"), // Replace with the path to your .ico file
+                    Icon = icon,
                     ContextMenuStrip = trayMenu,
                     Visible = true
                 };
