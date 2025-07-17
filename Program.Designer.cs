@@ -378,19 +378,34 @@ Cores: {cores}";
                 var g = e.Graphics;
                 float scaledFontSize = selectedFont.Size * 0.5f;
 
-                using var pen = new Pen(Color.Red, 2);
-                g.DrawRectangle(pen, 0, 0, dragPanel.Width - 1, dragPanel.Height - 1);
-
-                // Placeholder text instead of processing variables
+                // Placeholder text
                 string placeholderText = formatBox.Text.Length > 0 ? formatBox.Text : "Drag to position text here";
-                using var brush = new SolidBrush(Color.Red);
-                Color background = Color.FromArgb(100, 255, 255, 255);
-                e.Graphics.FillRectangle(new SolidBrush(background), 0, 0, dragPanel.Width, dragPanel.Height);
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                
+
+                // Measure the size of the text
                 using (Font scaledFont = new Font(selectedFont.FontFamily, scaledFontSize, selectedFont.Style))
                 {
-                    g.DrawString(placeholderText, scaledFont, brush, new PointF(0, 0));
+                    SizeF textSize = g.MeasureString(placeholderText, scaledFont);
+
+                    // Add padding around the text
+                    int padding = 0;
+                    int newWidth = (int)textSize.Width + padding * 2;
+                    int newHeight = (int)textSize.Height + padding * 2;
+
+                    // Resize the drag panel dynamically
+                    dragPanel.Size = new Size(newWidth, newHeight);
+
+                    // Draw the background with transparency
+                    Color background = Color.FromArgb(100, 255, 255, 255);
+                    g.FillRectangle(new SolidBrush(background), 0, 0, dragPanel.Width, dragPanel.Height);
+
+                    // Draw the border
+                    using var pen = new Pen(Color.Red, 2);
+                    g.DrawRectangle(pen, 0, 0, dragPanel.Width - 1, dragPanel.Height - 1);
+
+                    // Draw the text
+                    using var brush = new SolidBrush(Color.Red);
+                    g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+                    g.DrawString(placeholderText, scaledFont, brush, new PointF(padding, padding));
                 }
             };
 
